@@ -9,7 +9,7 @@
 :root{
   --page:#dde4df; --page-ink:#2e3a35; --page-muted:#66766e;
   --shell:#2f7f78; --shell-hi:#45a197; --shell-lo:#1f5d57;
-  --panel:#efe6cf; --bezel:#23272c; --pad:#2b2f34; --hot:#e2553b; --hot-lo:#a8341f;
+  --panel:#efe6cf; --bezel:#23272c; --pad:#2b2f34; --hot:#e2553b; --hot-lo:#a8341f; --led:#ffd84a;
   --f-display:"Bowlby One","Arial Black",Impact,sans-serif;
   --f-ui:"Chakra Petch",ui-monospace,"Cascadia Mono",Consolas,monospace;
 }
@@ -31,8 +31,8 @@ body{
 
 .device{
   container-type:inline-size;
-  width:min(440px, 100%, calc((100vh - 60px) * .56));
-  width:min(440px, 100%, calc((100dvh - 60px) * .56));
+  width:min(440px, 100%, calc((100vh - 60px) * .53));
+  width:min(440px, 100%, calc((100dvh - 60px) * .53));
   min-width:min(260px, 100%);
 }
 .shell{
@@ -93,7 +93,7 @@ button:focus-visible{ outline:.7cqw solid var(--panel); outline-offset:.6cqw }
 .dpad button.down{ background:#1b1e21; box-shadow:inset 0 .6cqw 1cqw rgba(0,0,0,.5) }
 
 .mid{ display:grid; gap:2.2cqw; justify-items:center; align-content:center }
-.mid label{ display:grid; gap:.8cqw; justify-items:center; font-size:2.6cqw; font-weight:700; letter-spacing:.12em; color:var(--panel) }
+.mid .lbl{ display:grid; gap:.8cqw; justify-items:center; font-size:2.6cqw; font-weight:700; letter-spacing:.12em; color:var(--panel) }
 .pill{
   width:12cqw; height:4.6cqw; border:0; border-radius:99px; background:var(--bezel);
   box-shadow:inset 0 .4cqw 0 rgba(255,255,255,.12), 0 .5cqw 0 rgba(0,0,0,.35);
@@ -112,6 +112,12 @@ button:focus-visible{ outline:.7cqw solid var(--panel); outline-offset:.6cqw }
 }
 .jump.down{ transform:translateY(.9cqw); box-shadow:0 .1cqw 0 var(--hot-lo), inset 0 .6cqw 1cqw rgba(0,0,0,.3) }
 .jumpwrap span{ font-size:2.8cqw; font-weight:700; letter-spacing:.16em; color:var(--bezel) }
+
+.options{ display:grid; grid-template-columns:repeat(4,1fr); gap:2cqw; margin-top:4.5cqw }
+.opt{ display:grid; gap:.9cqw; justify-items:center; font-size:2.4cqw; font-weight:700; letter-spacing:.1em; color:var(--panel) }
+.opt .pill{ width:11cqw; height:4cqw }
+.led{ display:inline-block; width:1.4cqw; height:1.4cqw; margin-right:.8cqw; border-radius:50%; vertical-align:middle; background:rgba(0,0,0,.35) }
+.led.on{ background:var(--led); box-shadow:0 0 1cqw var(--led) }
 
 .brand{ margin-top:4.5cqw; text-align:center; font-size:2.4cqw; letter-spacing:.32em; color:var(--panel); opacity:.75 }
 
@@ -139,20 +145,26 @@ button:focus-visible{ outline:.7cqw solid var(--panel); outline-offset:.6cqw }
         </div>
       </div>
       <div class="mid">
-        <label>JUEGO A<button id="btnA" class="pill" data-act="gameA" aria-label="Juego A"></button></label>
-        <label>JUEGO B<button id="btnB" class="pill" data-act="gameB" aria-label="Juego B"></button></label>
-        <label>HORA<button id="btnT" class="pill" data-act="time" aria-label="Hora"></button></label>
+        <div class="lbl">JUEGO A<button id="btnA" class="pill" data-act="gameA" aria-label="Juego A"></button></div>
+        <div class="lbl">JUEGO B<button id="btnB" class="pill" data-act="gameB" aria-label="Juego B"></button></div>
+        <div class="lbl">HORA<button id="btnT" class="pill" data-act="time" aria-label="Hora"></button></div>
       </div>
       <div class="jumpwrap">
         <button class="jump" data-act="jump" aria-label="Saltar"></button>
         <span>SALTAR</span>
       </div>
     </div>
+    <div class="options">
+      <div class="opt"><span><i class="led" id="ledPause"></i>PAUSA</span><button class="pill" data-act="pause" aria-label="Pausa"></button></div>
+      <div class="opt"><span><i class="led" id="ledMusic"></i>MÚSICA</span><button class="pill" data-act="music" aria-label="Música encendida o apagada"></button></div>
+      <div class="opt"><span><i class="led" id="ledSound"></i>SONIDO</span><button class="pill" data-act="mute" aria-label="Sonido encendido o apagado"></button></div>
+      <div class="opt"><span><i class="led" id="ledVib"></i>VIBRAR</span><button class="pill" data-act="vib" aria-label="Vibración encendida o apagada"></button></div>
+    </div>
     <div class="brand">DOBLE PANTALLA · CRISTAL LÍQUIDO</div>
   </section>
 </main>
 <p class="help">
-  <kbd>← → ↑ ↓</kbd> moverse · <kbd>Espacio</kbd> saltar · <kbd>1</kbd> Juego A · <kbd>2</kbd> Juego B · <kbd>M</kbd> sonido<br>
+  <kbd>← → ↑ ↓</kbd> moverse · <kbd>Espacio</kbd> saltar · <kbd>1</kbd> Juego A · <kbd>2</kbd> Juego B · <kbd>P</kbd> pausa · <kbd>N</kbd> música · <kbd>M</kbd> sonido<br>
   Subí la torre esquivando los engranajes y bajá la palanca para apagar al robot.
 </p>
 
@@ -180,23 +192,50 @@ new ResizeObserver(resize).observe(cv.b);
 resize();
 
 /* ---------- sound ---------- */
-let AC = null, muted = false;
+let AC = null;
+let opts = { music: true, sound: true, vib: true };
+try { Object.assign(opts, JSON.parse(localStorage.getItem('torre-opts') || '{}')); } catch (e) {}
+function saveOpts() { try { localStorage.setItem('torre-opts', JSON.stringify(opts)); } catch (e) {} }
 function audio() {
   if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
   if (AC && AC.state === 'suspended') AC.resume();
 }
-function beep(f, d = 0.05, when = 0, vol = 0.045) {
-  if (!AC || muted) return;
-  const t = AC.currentTime + when, o = AC.createOscillator(), g = AC.createGain();
-  o.type = 'square'; o.frequency.value = f;
+function tone(f, t, d, type, vol) {
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.value = f;
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
   o.connect(g).connect(AC.destination); o.start(t); o.stop(t + d + 0.02);
 }
+function beep(f, d = 0.05, when = 0, vol = 0.045) {
+  if (!AC || !opts.sound) return;
+  tone(f, AC.currentTime + when, d, 'square', vol);
+}
+function vib(pattern) {
+  if (!opts.vib || !navigator.vibrate) return;
+  try { navigator.vibrate(pattern); } catch (e) {}
+}
+
+/* Background tune: original 32-step loop, square lead over a triangle bass. */
+const MEL = [76,79,81,79, 76,74,72,74, 76,76,79,76, 74,0,0,0, 72,74,76,79, 81,79,76,74, 72,74,76,74, 72,0,0,0];
+const BAS = [48,48,43,43,45,45,41,43];
+const midi = n => 440 * Math.pow(2, (n - 69) / 12);
+let mStep = 0, mNext = 0;
+setInterval(() => {
+  if (!AC || !opts.music || state !== 'play' || paused) { mNext = 0; return; }
+  const step = Math.max(0.11, 0.16 - level * 0.008);
+  if (mNext < AC.currentTime) mNext = AC.currentTime + 0.05;
+  while (mNext < AC.currentTime + 0.2) {
+    const i = mStep % 32, m = MEL[i];
+    if (m) tone(midi(m), mNext, step * 0.8, 'square', 0.016);
+    if (i % 2 === 0) tone(midi(BAS[i >> 2] + (i % 4 ? 12 : 0)), mNext, step * 0.9, 'triangle', 0.05);
+    mStep++; mNext += step;
+  }
+}, 40);
 
 /* ---------- state ---------- */
 let state = 'boot', timer = 1500, mode = 'A';
 let score = 0, misses = 0, level = 0, bonusGiven = false, acc = 0, spawnCd = 2, robotPose = 'i';
-let gears = [], p = null;
+let gears = [], p = null, paused = false;
 let hi = 0;
 try { hi = +localStorage.getItem('torre-hi') || 0; } catch (e) {}
 
@@ -210,7 +249,7 @@ function resetRound() {
 }
 function start(m) {
   mode = m; score = 0; misses = 0; level = 0; bonusGiven = false;
-  resetRound(); state = 'play';
+  resetRound(); state = 'play'; paused = false; mStep = 0; updateLeds();
   [523, 659, 784].forEach((f, i) => beep(f, .07, i * .08));
 }
 function addScore(n) {
@@ -226,11 +265,13 @@ function saveHi() {
 function miss() {
   state = 'miss'; timer = 1700; misses++;
   [440, 330, 220, 165].forEach((f, i) => beep(f, .12, i * .13, .06));
+  vib(misses >= 3 ? [250, 90, 250, 90, 450] : [160, 70, 260]);
 }
 function pull() {
   state = 'win'; timer = 2600; gears = []; robotPose = 'z';
   addScore(10 + 5 * level);
   [784, 659, 784, 988, 1175, 1568].forEach((f, i) => beep(f, .09, i * .11));
+  vib([40, 40, 40, 40, 90]);
 }
 function hitCheck() {
   if (state !== 'play' || p.lad !== null) return;
@@ -265,8 +306,12 @@ function act(a) {
   audio();
   if (a === 'gameA' || a === 'gameB') { start(a === 'gameA' ? 'A' : 'B'); return; }
   if (a === 'time') { if (state === 'over' || state === 'idle') state = 'idle'; return; }
-  if (a === 'mute') { muted = !muted; return; }
+  if (a === 'mute') { opts.sound = !opts.sound; saveOpts(); updateLeds(); return; }
+  if (a === 'music') { opts.music = !opts.music; saveOpts(); updateLeds(); return; }
+  if (a === 'vib') { opts.vib = !opts.vib; saveOpts(); updateLeds(); vib(40); return; }
+  if (a === 'pause') { setPause(!paused); return; }
   if (state === 'idle' || state === 'over') { if (a === 'jump') start('A'); return; }
+  if (paused) { if (a === 'jump') setPause(false); return; }
   if (state !== 'play' || p.air > 0) return;
   switch (a) {
     case 'left': case 'right': {
@@ -293,6 +338,19 @@ function act(a) {
       p.air = jumpDur(); beep(660, .06); break;
   }
 }
+function setPause(on) {
+  if (on && !(state === 'play' || state === 'miss' || state === 'win')) return;
+  paused = on; updateLeds();
+  beep(on ? 523 : 784, .06); beep(on ? 392 : 1047, .08, .07);
+}
+function updateLeds() {
+  document.getElementById('ledPause').classList.toggle('on', paused);
+  document.getElementById('ledMusic').classList.toggle('on', opts.music);
+  document.getElementById('ledSound').classList.toggle('on', opts.sound);
+  document.getElementById('ledVib').classList.toggle('on', opts.vib);
+}
+updateLeds();
+document.addEventListener('visibilitychange', () => { if (document.hidden) setPause(true); });
 const REPEAT = new Set(['left', 'right', 'up', 'down']);
 const held = new Map();
 function press(a) {
@@ -311,7 +369,7 @@ document.querySelectorAll('[data-act]').forEach(b => {
   b.addEventListener('pointerdown', e => {
     e.preventDefault();
     try { b.setPointerCapture(e.pointerId); } catch (err) {}
-    b.classList.add('down'); press(a);
+    b.classList.add('down'); vib(12); press(a);
   });
   const up = () => { b.classList.remove('down'); release(a); };
   b.addEventListener('pointerup', up);
@@ -324,7 +382,7 @@ const KEYS = {
   ArrowLeft:'left', KeyA:'left', ArrowRight:'right', KeyD:'right',
   ArrowUp:'up', KeyW:'up', ArrowDown:'down', KeyS:'down',
   Space:'jump', KeyX:'jump', KeyK:'jump', Enter:'jump',
-  Digit1:'gameA', Numpad1:'gameA', Digit2:'gameB', Numpad2:'gameB', KeyH:'time', KeyM:'mute'
+  Digit1:'gameA', Numpad1:'gameA', Digit2:'gameB', Numpad2:'gameB', KeyH:'time', KeyM:'mute', KeyN:'music', KeyP:'pause', Escape:'pause'
 };
 addEventListener('keydown', e => {
   const a = KEYS[e.code]; if (!a) return;
@@ -534,6 +592,10 @@ function draw(now) {
     const pos = p.lad !== null ? { s: MID[p.lad].s, x: cx(LAD[p.lad]), y: MID[p.lad].y } : { s: FL[p.f].s, x: cx(p.c), y: FL[p.f].y };
     if (!blink) { inkOn(ctx[pos.s], true); drawStar(ctx[pos.s], pos.x, pos.y - 14); }
   }
+  if (paused) {
+    text(T, 'PAUSA', 132, 72, 14, slow);
+    text(B, 'PULSÁ PAUSA O SALTAR PARA SEGUIR', 16, 20, 9);
+  }
   if (state === 'idle') {
     text(B, 'PULSÁ JUEGO A O B', 16, 20, 10);
     text(B, 'RÉCORD ' + String(hi).padStart(4, '0'), 16, 36, 9);
@@ -547,6 +609,7 @@ function draw(now) {
 
 /* ---------- loop ---------- */
 function update(dt) {
+  if (paused) return;
   if (state === 'boot') { timer -= dt; if (timer <= 0) state = 'idle'; return; }
   if (state === 'play') {
     if (p.air > 0) { p.air -= dt; if (p.air <= 0) { p.air = 0; hitCheck(); } }
@@ -556,7 +619,7 @@ function update(dt) {
   } else if (state === 'miss') {
     timer -= dt;
     if (timer <= 0) {
-      if (misses >= 3) { state = 'over'; saveHi(); }
+      if (misses >= 3) { state = 'over'; saveHi(); updateLeds(); }
       else { resetRound(); state = 'play'; }
     }
   } else if (state === 'win') {
