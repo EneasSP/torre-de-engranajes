@@ -236,19 +236,41 @@ setInterval(() => {
 let state = 'boot', timer = 1500, mode = 'A';
 let score = 0, misses = 0, level = 0, bonusGiven = false, acc = 0, spawnCd = 2, robotPose = 'i';
 let gears = [], p = null, paused = false;
-let wrench = null, wrenchCd = 10, bonusT = 0;
+let wrench = null, wrenchCd = 10, bonusT = 0, burstCd = 0, newBotT = 0;
 const WCOLS = [2, 3, 4, 5];
 let hi = 0;
 try { hi = +localStorage.getItem('torre-hi') || 0; } catch (e) {}
+let top = [];
+try { top = JSON.parse(localStorage.getItem('torre-top') || '[]').filter(r => r && typeof r.s === 'number').slice(0, 5); } catch (e) {}
+if (top[0] && top[0].s > hi) hi = top[0].s;
+const ABC = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ';
+let ini = ['A', 'A', 'A'], cur = 0, newRank = -1;
+try { const l = localStorage.getItem('torre-ini'); if (l && l.length === 3) ini = [...l]; } catch (e) {}
+const qualifies = () => score > 0 && (top.length < 5 || score > top[top.length - 1].s);
+function confirmName() {
+  const n = ini.join(''), entry = { n, s: score };
+  top.push(entry); top.sort((a, b) => b.s - a.s); top = top.slice(0, 5);
+  newRank = top.indexOf(entry);
+  try { localStorage.setItem('torre-top', JSON.stringify(top)); localStorage.setItem('torre-ini', n); } catch (e) {}
+  state = 'over'; [784, 988, 1175, 1568].forEach((fr, i) => beep(fr, .08, i * .09));
+}
+function nameInput(a) {
+  if (a === 'up' || a === 'down') {
+    const i = ABC.indexOf(ini[cur]), d = a === 'up' ? 1 : -1;
+    ini[cur] = ABC[(i + d + ABC.length) % ABC.length]; beep(1047, .02);
+  } else if (a === 'left' || a === 'right') { cur = Math.max(0, Math.min(2, cur + (a === 'left' ? -1 : 1))); beep(880, .02); }
+  else if (a === 'jump') { if (cur < 2) { cur++; beep(880, .02); } else confirmName(); }
+}
 
 const tickMs = () => Math.max(190, (mode === 'A' ? 540 : 420) - level * 40);
 const maxGears = () => Math.min(7, (mode === 'A' ? 3 : 4) + level);
-const ladderChance = () => Math.min(0.6, (mode === 'A' ? 0.3 : 0.4) + level * 0.05);
+const rtype = () => level % 3;   // 0 clásico, 1 doble, 2 astuto
+const ladderChance = () => rtype() === 2 ? 0.85 : Math.min(0.6, (mode === 'A' ? 0.3 : 0.4) + level * 0.05);
 const jumpDur = () => Math.max(460, tickMs() * 1.7);
 
 function resetRound() {
-  p = { f: 0, c: 1, lad: null, air: 0, best: 0 };
-  gears = []; spawnCd = 2; robotPose = 'i'; acc = 0;
+  p = { f: 0, c: 1, lad: null, air: 0, jt: 0, jdx: 0, best: 0 };
+  gears = []; spawnCd = 2; robotPose = 'i'; acc = 0; burstCd = 0;
   wrench = null; wrenchCd = 8 + Math.floor(Math.random() * 8); bonusT = 0;
 }
 function start(m) {
@@ -319,10 +341,15 @@ function tick() {
   }
   gears = gears.filter(g => !g.dead);
   robotPose = 'i';
-  if (--spawnCd <= 0) {
-    if (gears.length < maxGears() && !gears.some(g => g.f === 4 && g.c >= 5)) {
-      gears.push({ f: 4, c: 6 }); robotPose = 't';
-      spawnCd = 2 + Math.floor(Math.random() * 4);
+  const free = minCol => !gears.some(g => g.lad == null && g.f === 4 && g.c >= minCol);
+  const spawn = () => { gears.push({ f: 4, c: 6 }); robotPose = 't'; };
+  if (burstCd > 0) { if (--burstCd === 0 && free(6)) spawn(); }
+  else if (--spawnCd <= 0) {
+    if (gears.length < maxGears() && free(5)) {
+      spawn();
+      const t = rtype();
+      spawnCd = t === 2 ? 1 + Math.floor(Math.random() * 3) : 2 + Math.floor(Math.random() * 4);
+      if (t === 1) { burstCd = 2; spawnCd += 2; }   // el robot doble tira de a dos
     } else spawnCd = 1;
   }
   wrenchTick();
@@ -333,6 +360,7 @@ function tick() {
 /* ---------- input ---------- */
 function act(a) {
   audio();
+  if (state === 'name') { if (!['gameA', 'gameB', 'time', 'pause', 'mute', 'music', 'vib'].includes(a)) nameInput(a); return; }
   if (a === 'gameA' || a === 'gameB') { start(a === 'gameA' ? 'A' : 'B'); return; }
   if (a === 'time') { if (state === 'over' || state === 'idle') state = 'idle'; return; }
   if (a === 'mute') { opts.sound = !opts.sound; saveOpts(); updateLeds(); return; }
@@ -341,7 +369,11 @@ function act(a) {
   if (a === 'pause') { setPause(!paused); return; }
   if (state === 'idle' || state === 'over') { if (a === 'jump') start('A'); return; }
   if (paused) { if (a === 'jump') setPause(false); return; }
-  if (state !== 'play' || p.air > 0) return;
+  if (state !== 'play') return;
+  if (p.air > 0) {   // en el aire: una flecha durante la subida elige hacia dónde caer
+    if ((a === 'left' || a === 'right') && !p.jdx && p.air > p.jt / 2) aim(a === 'left' ? -1 : 1);
+    return;
+  }
   switch (a) {
     case 'left': case 'right': {
       if (p.lad !== null) return;
@@ -364,7 +396,9 @@ function act(a) {
     case 'jump':
       if (p.lad !== null) return;
       if (p.f === 4 && p.c === 0) { pull(); return; }
-      p.air = jumpDur(); beep(660, .06); grabWrench(); break;
+      p.air = p.jt = jumpDur(); p.jdx = 0; beep(660, .06); grabWrench();
+      if (held.has('left')) aim(-1); else if (held.has('right')) aim(1);
+      break;
   }
 }
 function setPause(on) {
@@ -380,6 +414,10 @@ function updateLeds() {
 }
 updateLeds();
 document.addEventListener('visibilitychange', () => { if (document.hidden) setPause(true); });
+function aim(d) {
+  const nc = p.c + d;
+  if (nc >= 0 && nc <= maxCol(p.f)) p.jdx = d;
+}
 const REPEAT = new Set(['left', 'right', 'up', 'down']);
 const held = new Map();
 function press(a) {
@@ -414,6 +452,11 @@ const KEYS = {
   Digit1:'gameA', Numpad1:'gameA', Digit2:'gameB', Numpad2:'gameB', KeyH:'time', KeyM:'mute', KeyN:'music', KeyP:'pause', Escape:'pause'
 };
 addEventListener('keydown', e => {
+  if (state === 'name' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const k = e.key.toUpperCase();
+    if (k.length === 1 && ABC.includes(k)) { e.preventDefault(); ini[cur] = k; if (cur < 2) cur++; beep(1047, .02); return; }
+    if (e.key === 'Backspace') { e.preventDefault(); cur = Math.max(0, cur - 1); return; }
+  }
   const a = KEYS[e.code]; if (!a) return;
   e.preventDefault(); if (!e.repeat) press(a);
 });
@@ -453,13 +496,26 @@ function drawGear(g, x, y, rot) {
 }
 const RX = 294, RY = 118;
 function drawRobotBody(g) {
-  g.fillRect(RX - 1, RY - 52, 2, 8);
-  g.beginPath(); g.arc(RX, RY - 53, 3, 0, Math.PI * 2); g.fill();
-  g.beginPath(); g.rect(RX - 11, RY - 44, 22, 15); g.rect(RX - 7, RY - 40, 5, 5); g.rect(RX + 2, RY - 40, 5, 5); g.fill('evenodd');
   g.fillRect(RX - 3, RY - 29, 6, 3);
   g.beginPath(); g.rect(RX - 13, RY - 26, 26, 16); g.rect(RX - 7, RY - 22, 14, 2); g.rect(RX - 7, RY - 17, 9, 2); g.fill('evenodd');
   g.beginPath(); g.arc(RX - 7, RY - 5, 5, 0, Math.PI * 2); g.arc(RX + 7, RY - 5, 5, 0, Math.PI * 2); g.fill();
 }
+const HEADS = [
+  g => { // clásico
+    g.fillRect(RX - 1, RY - 52, 2, 8);
+    g.beginPath(); g.arc(RX, RY - 53, 3, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.rect(RX - 11, RY - 44, 22, 15); g.rect(RX - 7, RY - 40, 5, 5); g.rect(RX + 2, RY - 40, 5, 5); g.fill('evenodd');
+  },
+  g => { // doble: dos antenas y visor
+    g.fillRect(RX - 12, RY - 52, 2, 8); g.fillRect(RX + 10, RY - 52, 2, 8);
+    g.fillRect(RX - 15, RY - 54, 6, 2); g.fillRect(RX + 9, RY - 54, 6, 2);
+    g.beginPath(); g.rect(RX - 14, RY - 44, 28, 15); g.rect(RX - 10, RY - 39, 20, 4); g.fill('evenodd');
+  },
+  g => { // astuto: cúpula con un ojo
+    g.fillRect(RX + 5, RY - 52, 2, 8); g.fillRect(RX + 5, RY - 52, 6, 2);
+    g.beginPath(); g.arc(RX, RY - 30, 14, Math.PI, 0); g.closePath(); g.arc(RX, RY - 36, 4.5, 0, Math.PI * 2); g.fill('evenodd');
+  }
+];
 function drawRobotIdle(g) { g.fillRect(RX - 17, RY - 25, 4, 13); g.fillRect(RX + 13, RY - 25, 4, 13); }
 function drawRobotThrow(g) {
   g.fillRect(RX - 30, RY - 26, 17, 4); g.fillRect(RX - 33, RY - 30, 4, 5); g.fillRect(RX - 33, RY - 22, 4, 4);
@@ -510,6 +566,7 @@ for (let f = 0; f < 5; f++) for (const c of WCOLS) add(FL[f].s, `W${f},${c}`, g 
 for (let l = 0; l < 4; l++) add(MID[l].s, `GL${l}`, g => drawGear(g, cx(LAD[l]), MID[l].y - 10, l % 2));
 for (let l = 0; l < 4; l++) add(MID[l].s, `L${l}`, g => drawPlayer(g, cx(LAD[l]), MID[l].y, 'climb'));
 add('t', 'Rb', drawRobotBody);
+HEADS.forEach((fn, i) => add('t', 'H' + i, fn));
 add('t', 'Ri', drawRobotIdle);
 add('t', 'Rt', drawRobotThrow);
 add('t', 'Rz', drawRobotZap);
@@ -588,7 +645,7 @@ function draw(now) {
   const lit = new Set();
   const all = state === 'boot';
   if (state !== 'boot') {
-    lit.add('Rb');
+    lit.add('Rb'); lit.add('H' + rtype());
     lit.add(state === 'win' ? (blink ? 'Rz' : 'Ri') : robotPose === 't' ? 'Rt' : robotPose === 'z' ? 'Rz' : 'Ri');
     lit.add(state === 'win' ? 'Vd' : 'Vu');
   }
@@ -626,6 +683,7 @@ function draw(now) {
   text(T, 'JUEGO B', 152, 48, 8, all || ((state === 'play' || state === 'miss' || state === 'win' || state === 'over') && mode === 'B'));
   text(T, 'NIV ' + (level + 1), 214, 48, 8, all || state === 'play' || state === 'miss' || state === 'win');
   text(T, '¡BONUS LLAVE!', 112, 62, 9, all || (bonusT > 0 && blink));
+  text(T, '¡NUEVO ROBOT!', 112, 84, 10, all || (newBotT > 0 && slow));
   text(T, '¡ROBOT APAGADO!', 104, 72, 11, all || (state === 'win' && slow));
 
   if (state === 'miss' && p) {
@@ -636,15 +694,38 @@ function draw(now) {
     text(T, 'PAUSA', 132, 72, 14, slow);
     text(B, 'PULSÁ PAUSA O SALTAR PARA SEGUIR', 16, 20, 9);
   }
-  if (state === 'idle') {
-    text(B, 'PULSÁ JUEGO A O B', 16, 20, 10);
-    text(B, 'RÉCORD ' + String(hi).padStart(4, '0'), 16, 36, 9);
-  }
-  if (state === 'over') {
-    text(B, 'FIN DEL JUEGO', 16, 20, 11, slow);
-    text(B, 'RÉCORD ' + String(hi).padStart(4, '0'), 16, 36, 9);
-  }
+  if (state === 'idle') { text(B, 'PULSÁ JUEGO A O B', 16, 20, 10); rankPanel(B, -1, blink); }
+  if (state === 'over') { text(B, 'FIN DEL JUEGO', 16, 20, 11, slow); rankPanel(B, newRank, blink); }
+  if (state === 'name') namePanel(B, slow);
   T.globalAlpha = 1; B.globalAlpha = 1;
+}
+
+function panel(g) {
+  g.globalAlpha = 1; g.fillStyle = 'rgba(190,199,171,.94)'; g.fillRect(40, 44, 240, 150);
+  g.strokeStyle = INK; g.lineWidth = 1.5; g.strokeRect(40.5, 44.5, 239, 149);
+}
+function rankPanel(g, mark, blink) {
+  panel(g);
+  text(g, 'RÉCORDS', 132, 64, 11);
+  for (let i = 0; i < 5; i++) {
+    const r = top[i], y = 88 + i * 21, on = i !== mark || blink;
+    text(g, (i + 1) + '.', 66, y, 11, on);
+    text(g, r ? r.n : '- - -', 96, y, 11, on);
+    g.textAlign = 'right'; text(g, r ? String(r.s).padStart(4, '0') : '0000', 252, y, 11, on && !!r); g.textAlign = 'left';
+  }
+}
+function namePanel(g, slow) {
+  panel(g);
+  text(g, '¡NUEVO RÉCORD!', 112, 66, 12);
+  const pos = top.filter(r => r.s >= score).length + 1;
+  text(g, 'PUESTO ' + pos + '  ·  ' + String(score).padStart(4, '0') + ' PUNTOS', 86, 86, 9);
+  for (let i = 0; i < 3; i++) {
+    const x = 122 + i * 30;
+    text(g, ini[i], x, 128, 24);
+    if (i === cur && slow) g.fillRect(x - 1, 133, 18, 3);
+  }
+  text(g, '↑ ↓ LETRA   ← → MOVER', 98, 160, 8);
+  text(g, 'SALTAR PARA CONFIRMAR', 100, 176, 8);
 }
 
 /* ---------- loop ---------- */
@@ -652,20 +733,29 @@ function update(dt) {
   if (paused) return;
   if (state === 'boot') { timer -= dt; if (timer <= 0) state = 'idle'; return; }
   if (bonusT > 0) bonusT -= dt;
+  if (newBotT > 0 && state === 'play') newBotT -= dt;
   if (state === 'play') {
-    if (p.air > 0) { p.air -= dt; if (p.air <= 0) { p.air = 0; hitCheck(); } }
+    if (p.air > 0) {
+      p.air -= dt;
+      if (p.jdx && p.air <= p.jt / 2) { p.c += p.jdx; p.jdx = 0; beep(988, .025); grabWrench(); hitCheck(); }
+      if (state === 'play' && p.air <= 0) { p.air = 0; hitCheck(); }
+    }
     acc += dt;
     const tm = tickMs();
     while (state === 'play' && acc >= tm) { acc -= tm; tick(); }
   } else if (state === 'miss') {
     timer -= dt;
     if (timer <= 0) {
-      if (misses >= 3) { state = 'over'; saveHi(); updateLeds(); }
+      if (misses >= 3) {
+        saveHi(); newRank = -1;
+        if (qualifies()) { state = 'name'; cur = 0; } else state = 'over';
+        updateLeds();
+      }
       else { resetRound(); state = 'play'; }
     }
   } else if (state === 'win') {
     timer -= dt;
-    if (timer <= 0) { level++; resetRound(); state = 'play'; }
+    if (timer <= 0) { level++; resetRound(); state = 'play'; newBotT = 2600; }
   }
 }
 let last = performance.now();
