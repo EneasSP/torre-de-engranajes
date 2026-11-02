@@ -165,7 +165,7 @@ button:focus-visible{ outline:.7cqw solid var(--panel); outline-offset:.6cqw }
 </main>
 <p class="help">
   <kbd>← → ↑ ↓</kbd> moverse · <kbd>Espacio</kbd> saltar · <kbd>1</kbd> Juego A · <kbd>2</kbd> Juego B · <kbd>P</kbd> pausa · <kbd>N</kbd> música · <kbd>M</kbd> sonido<br>
-  Subí la torre esquivando los engranajes y bajá la palanca para apagar al robot.
+  Subí la torre esquivando los engranajes y bajá la palanca para apagar al robot. Saltá debajo de la llave para ganar puntos extra.
 </p>
 
 <script>
@@ -236,6 +236,8 @@ setInterval(() => {
 let state = 'boot', timer = 1500, mode = 'A';
 let score = 0, misses = 0, level = 0, bonusGiven = false, acc = 0, spawnCd = 2, robotPose = 'i';
 let gears = [], p = null, paused = false;
+let wrench = null, wrenchCd = 10, bonusT = 0;
+const WCOLS = [2, 3, 4, 5];
 let hi = 0;
 try { hi = +localStorage.getItem('torre-hi') || 0; } catch (e) {}
 
@@ -246,6 +248,7 @@ const jumpDur = () => Math.max(460, tickMs() * 1.7);
 function resetRound() {
   p = { f: 0, c: 1, lad: null, air: 0, best: 0 };
   gears = []; spawnCd = 2; robotPose = 'i'; acc = 0;
+  wrench = null; wrenchCd = 8 + Math.floor(Math.random() * 8); bonusT = 0;
 }
 function start(m) {
   mode = m; score = 0; misses = 0; level = 0; bonusGiven = false;
@@ -273,6 +276,22 @@ function pull() {
   [784, 659, 784, 988, 1175, 1568].forEach((f, i) => beep(f, .09, i * .11));
   vib([40, 40, 40, 40, 90]);
 }
+/* Bonus wrench: floats above a cell for a while; jump under it to grab it. */
+function wrenchTick() {
+  if (wrench) { if (--wrench.ttl <= 0) { wrench = null; wrenchCd = 14 + Math.floor(Math.random() * 14); } return; }
+  if (--wrenchCd > 0) return;
+  const f = Math.floor(Math.random() * 5), c = WCOLS[Math.floor(Math.random() * WCOLS.length)];
+  if (p.f === f && p.c === c) { wrenchCd = 2; return; }
+  wrench = { f, c, ttl: 18 };
+  beep(1568, .04); beep(2093, .05, .06);
+}
+function grabWrench() {
+  if (!wrench || p.lad !== null || wrench.f !== p.f || wrench.c !== p.c) return;
+  const pts = 10 + 5 * level;
+  addScore(pts); wrench = null; wrenchCd = 16 + Math.floor(Math.random() * 14); bonusT = 1400;
+  [1319, 1568, 2093].forEach((fr, i) => beep(fr, .06, i * .06));
+  vib(30);
+}
 function hitCheck() {
   if (state !== 'play' || p.lad !== null) return;
   for (const g of gears) {
@@ -297,6 +316,7 @@ function tick() {
       spawnCd = 2 + Math.floor(Math.random() * 4);
     } else spawnCd = 1;
   }
+  wrenchTick();
   beep(gears.length ? 196 : 147, .025, 0, .03);
   hitCheck();
 }
@@ -335,7 +355,7 @@ function act(a) {
     case 'jump':
       if (p.lad !== null) return;
       if (p.f === 4 && p.c === 0) { pull(); return; }
-      p.air = jumpDur(); beep(660, .06); break;
+      p.air = jumpDur(); beep(660, .06); grabWrench(); break;
   }
 }
 function setPause(on) {
@@ -449,6 +469,13 @@ function drawLever(g, down) {
   if (down) { g.moveTo(9, 110); g.lineTo(22, 98); g.stroke(); g.beginPath(); g.arc(23, 97, 3.5, 0, Math.PI * 2); g.fill(); }
   else { g.moveTo(9, 110); g.lineTo(5, 92); g.stroke(); g.beginPath(); g.arc(5, 90, 3.5, 0, Math.PI * 2); g.fill(); }
 }
+function drawWrench(g, x, y) {
+  g.save(); g.translate(x, y); g.rotate(-Math.PI / 4);
+  g.fillRect(-1.8, -6, 3.6, 13);
+  g.beginPath(); g.arc(0, -8, 5, 0, Math.PI * 2); g.rect(-1.6, -14, 3.2, 7); g.fill('evenodd');
+  g.beginPath(); g.arc(0, 8, 3.4, 0, Math.PI * 2); g.arc(0, 8, 1.4, 0, Math.PI * 2); g.fill('evenodd');
+  g.restore();
+}
 function drawStar(g, x, y) {
   g.beginPath();
   for (let i = 0; i < 16; i++) {
@@ -470,6 +497,7 @@ for (let f = 0; f < 5; f++) for (let c = 0; c <= maxCol(f); c++) {
   add(s, `J${f},${c}`, g => drawPlayer(g, x, y - 22, 'jump'));
   add(s, `G${f},${c}`, g => drawGear(g, x, y - 10, (f + c) % 2));
 }
+for (let f = 0; f < 5; f++) for (const c of WCOLS) add(FL[f].s, `W${f},${c}`, g => drawWrench(g, cx(c), FL[f].y - 42));
 for (let l = 0; l < 4; l++) add(MID[l].s, `L${l}`, g => drawPlayer(g, cx(LAD[l]), MID[l].y, 'climb'));
 add('t', 'Rb', drawRobotBody);
 add('t', 'Ri', drawRobotIdle);
@@ -556,6 +584,7 @@ function draw(now) {
   }
   if (p && (state === 'play' || state === 'miss' || state === 'win')) {
     for (const g of gears) lit.add(`G${g.f},${g.c}`);
+    if (wrench && (wrench.ttl > 4 || blink)) lit.add(`W${wrench.f},${wrench.c}`);
     if (state !== 'miss' || blink) {
       lit.add(p.lad !== null ? `L${p.lad}` : (p.air > 0 ? 'J' : 'P') + `${p.f},${p.c}`);
     }
@@ -586,6 +615,7 @@ function draw(now) {
   text(T, 'JUEGO A', 112, 48, 8, all || ((state === 'play' || state === 'miss' || state === 'win' || state === 'over') && mode === 'A'));
   text(T, 'JUEGO B', 152, 48, 8, all || ((state === 'play' || state === 'miss' || state === 'win' || state === 'over') && mode === 'B'));
   text(T, 'NIV ' + (level + 1), 214, 48, 8, all || state === 'play' || state === 'miss' || state === 'win');
+  text(T, '¡BONUS LLAVE!', 112, 62, 9, all || (bonusT > 0 && blink));
   text(T, '¡ROBOT APAGADO!', 104, 72, 11, all || (state === 'win' && slow));
 
   if (state === 'miss' && p) {
@@ -611,6 +641,7 @@ function draw(now) {
 function update(dt) {
   if (paused) return;
   if (state === 'boot') { timer -= dt; if (timer <= 0) state = 'idle'; return; }
+  if (bonusT > 0) bonusT -= dt;
   if (state === 'play') {
     if (p.air > 0) { p.air -= dt; if (p.air <= 0) { p.air = 0; hitCheck(); } }
     acc += dt;
