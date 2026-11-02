@@ -250,6 +250,7 @@ try { hi = +localStorage.getItem('torre-hi') || 0; } catch (e) {}
 
 const tickMs = () => Math.max(190, (mode === 'A' ? 540 : 420) - level * 40);
 const maxGears = () => Math.min(7, (mode === 'A' ? 3 : 4) + level);
+const ladderChance = () => Math.min(0.6, (mode === 'A' ? 0.3 : 0.4) + level * 0.05);
 const jumpDur = () => Math.max(460, tickMs() * 1.7);
 
 function resetRound() {
@@ -300,8 +301,12 @@ function grabWrench() {
   vib(30);
 }
 function hitCheck() {
-  if (state !== 'play' || p.lad !== null) return;
+  if (state !== 'play') return;
   for (const g of gears) {
+    if (p.lad !== null || g.lad != null) {
+      if (p.lad !== null && g.lad === p.lad) { miss(); return; }
+      continue;
+    }
     if (g.f !== p.f || g.c !== p.c) continue;
     if (p.air > 0) {
       const k = g.f * 10 + g.c;
@@ -311,6 +316,10 @@ function hitCheck() {
 }
 function tick() {
   for (const g of gears) {
+    // half-way down a ladder: land on the floor below and keep rolling
+    if (g.lad != null) { g.f = g.lad; g.c = LAD[g.lad]; g.lad = null; continue; }
+    // standing on top of a ladder: sometimes roll down it instead of along the floor
+    if (g.f > 0 && g.c === LAD[g.f - 1] && Math.random() < ladderChance()) { g.lad = g.f - 1; continue; }
     const nc = g.c + dirOf(g.f);
     if (nc < 0 || nc > 7) { if (g.f === 0) g.dead = true; else g.f--; }
     else g.c = nc;
@@ -505,6 +514,7 @@ for (let f = 0; f < 5; f++) for (let c = 0; c <= maxCol(f); c++) {
   add(s, `G${f},${c}`, g => drawGear(g, x, y - 10, (f + c) % 2));
 }
 for (let f = 0; f < 5; f++) for (const c of WCOLS) add(FL[f].s, `W${f},${c}`, g => drawWrench(g, cx(c), FL[f].y - 42));
+for (let l = 0; l < 4; l++) add(MID[l].s, `GL${l}`, g => drawGear(g, cx(LAD[l]), MID[l].y - 10, l % 2));
 for (let l = 0; l < 4; l++) add(MID[l].s, `L${l}`, g => drawPlayer(g, cx(LAD[l]), MID[l].y, 'climb'));
 add('t', 'Rb', drawRobotBody);
 add('t', 'Ri', drawRobotIdle);
@@ -590,7 +600,7 @@ function draw(now) {
     lit.add(state === 'win' ? 'Vd' : 'Vu');
   }
   if (p && (state === 'play' || state === 'miss' || state === 'win')) {
-    for (const g of gears) lit.add(`G${g.f},${g.c}`);
+    for (const g of gears) lit.add(g.lad != null ? `GL${g.lad}` : `G${g.f},${g.c}`);
     if (wrench && (wrench.ttl > 4 || blink)) lit.add(`W${wrench.f},${wrench.c}`);
     if (state !== 'miss' || blink) {
       lit.add(p.lad !== null ? `L${p.lad}` : (p.air > 0 ? 'J' : 'P') + `${p.f},${p.c}`);

@@ -5,7 +5,7 @@ Juego de doble pantalla LCD al estilo de las consolas de bolsillo de los 80. Se 
 **Jugar:** https://eneassp.github.io/torre-de-engranajes/
 
 ## Cómo se juega
-Subí la torre esquivando los engranajes que tira el robot y bajá la palanca de arriba a la izquierda para apagarlo. Cada nivel es más rápido. Cada tanto aparece una llave inglesa flotando: saltá justo debajo para agarrarla y ganar puntos extra (antes de que desaparezca). Con 3 fallos se termina el juego.
+Subí la torre esquivando los engranajes que tira el robot y bajá la palanca de arriba a la izquierda para apagarlo. Cada nivel es más rápido. Ojo con las escaleras: a veces los engranajes bajan rodando por ellas y te pueden pegar mientras subís. Cada tanto aparece una llave inglesa flotando: saltá justo debajo para agarrarla y ganar puntos extra (antes de que desaparezca). Con 3 fallos se termina el juego.
 
 - Celular: cruceta, botón rojo SALTAR, JUEGO A / JUEGO B / HORA.
 - Teclado: flechas o WASD para moverse, Espacio para saltar, 1 = Juego A, 2 = Juego B, H = hora, M = sonido.
